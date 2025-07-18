@@ -135,10 +135,9 @@ pub const DrawableHitCircle = struct {
 
         alpha = std.math.clamp(alpha * fade_out_scale, 0.0, 1.0);
 
-        const stacking_vector = zm.Vec2f{ self.Beatmap.CircleSizeOsuPixels / 5.0, self.Beatmap.CircleSizeOsuPixels / 5.0 };
         const stacking_count = zm.Vec2f{ @floatFromInt(self.HitCircle.StackCount), @floatFromInt(self.HitCircle.StackCount) };
 
-        const stacking_offset = stacking_vector * stacking_count;
+        const stacking_offset = self.Beatmap.GetStackVector() * stacking_count;
 
         const draw_pos = PlayableBeatmap.MapToPlayfield(self.HitCircle.X, self.HitCircle.Y) + stacking_offset;
         const draw_size = self.Beatmap.GetWorldCircleSize();

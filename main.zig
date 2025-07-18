@@ -23,6 +23,8 @@ const Sound = @import("Sound.zig").Sound;
 const Beatmap = @import("Osu/OsuParser.zig").Beatmap;
 const PlayableBeatmap = @import("Osu/PlayableBeatmap.zig").PlayableBeatmap;
 
+const Replay = @import("Osu/ReplayParser.zig").Replay;
+
 pub fn main() !void {
     std.debug.print("\nHello zig!\n\n", .{});
 
@@ -57,7 +59,7 @@ pub fn main() !void {
     }
     defer c.SDL_GL_DeleteContext(gl_context);
 
-    _ = c.SDL_GL_SetSwapInterval(1);
+    _ = c.SDL_GL_SetSwapInterval(0);
 
     c.glDisable(c.GL_DEPTH_TEST);
     c.glEnable(c.GL_TEXTURE);

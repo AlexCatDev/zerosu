@@ -77,6 +77,7 @@ pub const Skin = struct {
             };
 
             //const file = std.fs.openFileAbsolute(file_path, .{}) catch continue;
+            //how about not allocating this everytime a file is loaded xd
             const fileData = try file.readToEndAlloc(std.heap.c_allocator, 50000000);
             defer std.heap.c_allocator.free(fileData);
 

@@ -46,12 +46,13 @@ const Vertex = packed struct {
     }
 };
 
-const MAX_TEXTURES: u8 = 4;
+const MAX_TEXTURES: usize = 4;
 
 const DEFAULT_FRAGMENT_SHADER_SRC = @embedFile("../shaders/main.frag");
 const DEFAULT_VERTEX_SHADER_SRC = @embedFile("../shaders/main.vert");
 
-const TextureHashMap = std.AutoHashMap(*const Texture, u8);
+//const TextureHashMap = std.AutoHashMap(*const Texture, u8);
+const TextureBindList = std.ArrayList(c_uint);
 
 pub const Graphics = struct {
     m_PrimitiveBatcher: PrimitiveBatcher,
@@ -59,9 +60,7 @@ pub const Graphics = struct {
     m_IndexBuffer: IndexBuffer,
     m_Shader: Shader,
 
-    m_TextureBindMap: TextureHashMap,
-
-    m_TexBindIndex: u8 = 0,
+    m_TextureBindList: TextureBindList,
 
     ProjectionMatrix: zm.Mat4f = zm.Mat4f.identity(),
     Time: f32 = 0.0,
@@ -74,33 +73,25 @@ pub const Graphics = struct {
 
             .m_Shader = try Shader.Init(DEFAULT_VERTEX_SHADER_SRC, DEFAULT_FRAGMENT_SHADER_SRC),
 
-            .m_TextureBindMap = TextureHashMap.init(std.heap.c_allocator),
+            .m_TextureBindList = TextureBindList.init(std.heap.c_allocator),
         };
 
         return graphics;
     }
 
-    inline fn getTextureSlot(self: *Graphics, tex: *const Texture) u8 {
-        const p = self.m_TextureBindMap.get(tex);
-
-        //Not found, Generate id
-        if (p == null) {
-            //We can't bind anymore textures, flush renderer and start over
-            if (self.m_TexBindIndex == MAX_TEXTURES) {
-                //EndDraw and resets tex bind index.
-                self.EndDraw();
-            }
-            const availableSlot = self.m_TexBindIndex;
-            self.m_TexBindIndex += 1;
-
-            self.m_TextureBindMap.put(tex, availableSlot) catch |err| {
-                std.debug.print("Error: {} occurred while trying to getTextureSlot: {}\n", .{ err, availableSlot });
-            };
-
-            return availableSlot;
+    inline fn getTextureSlot(self: *Graphics, tex: *const Texture) usize {
+        for (self.m_TextureBindList.items, 0..) |handle, i| {
+            if (tex.id == handle)
+                return i;
         }
 
-        return p.?;
+        if (self.m_TextureBindList.items.len == MAX_TEXTURES) {
+            self.EndDraw();
+        }
+        const index = self.m_TextureBindList.items.len;
+
+        self.m_TextureBindList.append(tex.id) catch unreachable;
+        return index;
     }
 
     pub inline fn DrawRectangleCentered(self: *Graphics, pos: zm.Vec2f, size: zm.Vec2f, color: zm.Vec4f, texture: *const Texture, textureRect: zm.Vec4f) void {
@@ -225,13 +216,12 @@ pub const Graphics = struct {
 
     pub fn EndDraw(self: *Graphics) void {
         //Bind Textures
-        var iter = self.m_TextureBindMap.iterator();
-        while (iter.next()) |entry| {
-            const texture = entry.key_ptr.*.*;
-            const bindIndex = entry.value_ptr.*;
 
-            texture.Bind(bindIndex);
+        for (0..self.m_TextureBindList.items.len) |i| {
+            c.glActiveTexture(@intCast(c.GL_TEXTURE0 + i));
+            c.glBindTexture(c.GL_TEXTURE_2D, self.m_TextureBindList.items[i]);
         }
+
         //PrintGLError("bind textures");
         //Enable Shader
         self.m_Shader.Use();
@@ -287,8 +277,7 @@ pub const Graphics = struct {
         //PrintGLError("draw elements");
         Vertex.DisableVertexAttribs();
         //PrintGLError("disable vertex attribs");
-        self.m_TexBindIndex = 0;
-        self.m_TextureBindMap.clearRetainingCapacity();
+        self.m_TextureBindList.clearRetainingCapacity();
         self.m_PrimitiveBatcher.ResetWritePosition();
     }
 };

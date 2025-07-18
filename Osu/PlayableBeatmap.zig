@@ -21,20 +21,27 @@ pub const PlayableBeatmap = struct {
     Preempt: i32 = 0,
     FadeIn: i32 = 0,
     CircleSizeOsuPixels: f32 = 0,
-    pub fn Load(allocator: std.mem.Allocator, folderPath: []const u8, osuMapName: []const u8) !PlayableBeatmap {
+    pub fn Load(allocator: std.mem.Allocator, folderPath_1: []const u8, osuMapName: []const u8) !PlayableBeatmap {
         //Load beatmap file
 
-        const osu_file_path = std.fmt.allocPrint(allocator, "{s}/{s}.osu", .{ folderPath, osuMapName }) catch unreachable;
+        var real_folder_path = folderPath_1;
+
+        var file_path_buf: [1024]u8 = undefined;
+        if (tryGetAbsolutePath(&file_path_buf, folderPath_1)) |real_path| {
+            real_folder_path = real_path;
+        }
+
+        const osu_file_path = std.fmt.allocPrint(allocator, "{s}/{s}.osu", .{ real_folder_path, osuMapName }) catch unreachable;
         defer allocator.free(osu_file_path);
 
-        const map_file = try std.fs.cwd().openFile(osu_file_path, .{}); //try std.fs.openFileAbsolute(osu_file_path, .{ .mode = .read_only });
+        const map_file = try std.fs.openFileAbsolute(osu_file_path, .{});
         defer map_file.close();
-        const beatmap_text = std.fs.File.readToEndAlloc(map_file, allocator, 50_000_00) catch unreachable;
+        const beatmap_text = std.fs.File.readToEndAlloc(map_file, allocator, 500_000_00) catch unreachable;
         defer allocator.free(beatmap_text);
 
         var beatmap = Beatmap.FromString(allocator, beatmap_text);
         beatmap.StackObjectsPass();
-        const song_file_path = std.fmt.allocPrint(allocator, "{s}/{s}", .{ folderPath, beatmap.General.AudioFilename }) catch unreachable;
+        const song_file_path = std.fmt.allocPrint(allocator, "{s}/{s}", .{ real_folder_path, beatmap.General.AudioFilename }) catch unreachable;
         defer allocator.free(song_file_path);
 
         const song = Sound.FromFile(song_file_path);
@@ -49,17 +56,45 @@ pub const PlayableBeatmap = struct {
         return final_bm;
     }
 
+    ///If _path_ starts with a "./" it's asumed to be a relative-to-exe path and will resolve the path and return a view into buffer, otherwise returns null if not detected or there was an error
+    fn tryGetAbsolutePath(buffer: []u8, path: []const u8) ?[]const u8 {
+        if (path.len < 2)
+            return null;
+
+        if (path[0] == '.' and path[1] == '/') {
+            //copy the exe path to the start of the buffer
+
+            const exe_path = std.fs.selfExeDirPath(buffer[0..]) catch return null;
+            //now copy the input path into the buffer, at the offset of where the exepath starts, and only copy after the "."
+
+            if (exe_path.len + (path.len - 1) > buffer.len)
+                return null;
+
+            std.mem.copyForwards(u8, buffer[exe_path.len..], path[1..]);
+
+            //slice to correct length
+            return buffer[0 .. (path.len - 1) + exe_path.len];
+        }
+
+        return null;
+    }
+
     pub fn ApplyMods(self: *PlayableBeatmap) void {
         const ar = self.Beatmap.Difficulty.ApproachRate;
         const cs = self.Beatmap.Difficulty.CircleSize;
 
-        const preempt = MapDifficultyRange(ar, 1800.0, 1200.0, 450.0);
+        const preempt = Beatmap.MapDifficultyRange(ar, 1800.0, 1200.0, 450.0);
 
         self.Preempt = @as(i32, @intFromFloat(preempt));
 
         self.FadeIn = @as(i32, @intFromFloat(400.0 * @min(1.0, preempt / 450.0)));
 
         self.CircleSizeOsuPixels = 54.4 - 4.48 * cs;
+    }
+
+    pub fn GetStackVector(self: *const PlayableBeatmap) zm.Vec2f {
+        const stack_amount = (self.CircleSizeOsuPixels * _osu_to_world_scale) / 10.0;
+        return .{ stack_amount, stack_amount };
     }
 
     pub fn OsuToWorldScale() f32 {
@@ -92,16 +127,6 @@ pub const PlayableBeatmap = struct {
         out[3] = MathUtils.Map(sliderBounds[3], 0, 384, _playfield[1], _playfield[1] + _playfield[3]);
 
         return out;
-    }
-
-    pub fn MapDifficultyRange(difficulty: f32, min: f32, mid: f32, max: f32) f32 {
-        if (difficulty > 5.0)
-            return mid + (max - mid) * (difficulty - 5.0) / 5.0;
-
-        if (difficulty < 5.0)
-            return mid - (mid - min) * (5.0 - difficulty) / 5.0;
-
-        return mid;
     }
 
     pub fn UpdatePlayfield(viewport_width: f32, viewport_height: f32) void {

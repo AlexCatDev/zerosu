@@ -24,7 +24,7 @@ pub const Sound = struct {
     //なんかデュプリケートした
 
     pub fn FromFile(file: []const u8) Sound {
-        const stream = Bass.BASS_StreamCreateFile(Bass.FALSE, &file[0], 0, 0, Bass.BASS_STREAM_PRESCAN | Bass.BASS_ASYNCFILE | Bass.BASS_SAMPLE_FLOAT);
+        const stream = Bass.BASS_StreamCreateFile(Bass.FALSE, &file[0], 0, 0, Bass.BASS_STREAM_PRESCAN | Bass.BASS_SAMPLE_FLOAT);
 
         const bassErr = Bass.BASS_ErrorGetCode();
 

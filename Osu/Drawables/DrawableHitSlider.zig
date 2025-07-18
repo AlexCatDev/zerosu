@@ -175,7 +175,7 @@ pub const DrawableHitSlider = struct {
         drawable_slider.HitObject = hit_object;
 
         //todo make these global because theres no reason to recreate memory
-        Profiler.Start("Slider_Parse");
+        //Profiler.Start("Slider_Parse");
         var cp_temp_buffer = std.ArrayList(zm.Vec2f).init(allocator);
         defer cp_temp_buffer.deinit();
         var full_path_buffer = std.ArrayList(zm.Vec2f).init(allocator);
@@ -260,9 +260,9 @@ pub const DrawableHitSlider = struct {
 
         drawable_slider.Path = Path.Init(path_slice, beatmap.CircleSizeOsuPixels);
 
-        std.debug.print("Target: {d} Actual: {d}\n", .{ hit_object.HitSlider.?.PixelLength, drawable_slider.Path.Length });
+        //std.debug.print("Target: {d} Actual: {d}\n", .{ hit_object.HitSlider.?.PixelLength, drawable_slider.Path.Length });
 
-        Profiler.End("Slider_Parse");
+        //Profiler.End("Slider_Parse");
         const slider_texture = Texture.Init2(c.GL_TEXTURE_2D, drawable_slider.Path.Width, drawable_slider.Path.Height, c.GL_DEPTH_COMPONENT, c.GL_DEPTH_COMPONENT, c.GL_UNSIGNED_SHORT) catch unreachable;
 
         //const before_fbo_size = Viewport.GetSize();
@@ -310,7 +310,6 @@ pub const DrawableHitSlider = struct {
         }
 
         const util = struct {
-            //i will add this later
             pub inline fn placeCircle(center: zm.Vec2f, radius: f32) void {
                 const SEGMENTS: u16 = 40;
                 const ANGLE_STEP: f32 = 2.0 * std.math.pi / @as(f32, @floatFromInt(SEGMENTS));
@@ -336,16 +335,95 @@ pub const DrawableHitSlider = struct {
                     };
                 }
             }
-            pub inline fn normalizeSafe(v: zm.Vec2f) zm.Vec2f {
-                const length = zm.vec.len(v);
-                if (length < 0)
-                    @breakpoint();
-                const len = zm.Vec2f{ length, length };
-                return if (length > 0.00001) (v / len) else zm.Vec2f{ 0.0, 0.0 };
+
+            pub inline fn drawLineSegment(start: zm.Vec2f, end: zm.Vec2f, perpendicular: zm.Vec2f, half_thickness: zm.Vec2f) void {
+                const offset = perpendicular * half_thickness;
+
+                const top_side = _SliderBatcher.?.GetQuad();
+
+                top_side[0].X = start[0] + offset[0];
+                top_side[0].Y = start[1] + offset[1];
+                top_side[0].Depth = -1.0;
+
+                top_side[1].X = start[0];
+                top_side[1].Y = start[1];
+                top_side[1].Depth = 0.0;
+
+                top_side[2].X = end[0];
+                top_side[2].Y = end[1];
+                top_side[2].Depth = 0.0;
+
+                top_side[3].X = end[0] + offset[0];
+                top_side[3].Y = end[1] + offset[1];
+                top_side[3].Depth = -1.0;
+
+                const bottom_size = _SliderBatcher.?.GetQuad();
+
+                bottom_size[0].X = start[0] - offset[0];
+                bottom_size[0].Y = start[1] - offset[1];
+                bottom_size[0].Depth = -1.0;
+
+                bottom_size[1].X = start[0];
+                bottom_size[1].Y = start[1];
+                bottom_size[1].Depth = 0.0;
+
+                bottom_size[2].X = end[0];
+                bottom_size[2].Y = end[1];
+                bottom_size[2].Depth = 0.0;
+
+                bottom_size[3].X = end[0] - offset[0];
+                bottom_size[3].Y = end[1] - offset[1];
+                bottom_size[3].Depth = -1.0;
             }
 
-            pub inline fn perpendicular(v: zm.Vec2f) zm.Vec2f {
-                return .{ -v[1], v[0] };
+            pub inline fn drawCornerJointDynamic(center: zm.Vec2f, prev_perpendicular: zm.Vec2f, curr_perpendicular: zm.Vec2f, half_thickness: zm.Vec2f) void {
+                const cross = prev_perpendicular[0] * curr_perpendicular[1] - prev_perpendicular[1] * curr_perpendicular[0];
+
+                const is_left_turn = if (cross > 0.0) true else false;
+
+                var start_offset = if (is_left_turn) prev_perpendicular else -prev_perpendicular;
+                start_offset *= half_thickness;
+                var end_offset = if (is_left_turn) curr_perpendicular else -curr_perpendicular;
+                end_offset *= half_thickness;
+
+                const start_angle = std.math.atan2(start_offset[1], start_offset[0]);
+                const end_angle = std.math.atan2(end_offset[1], end_offset[0]);
+
+                var angle_diff = end_angle - start_angle;
+
+                if (angle_diff > std.math.pi) {
+                    angle_diff -= 2.0 * std.math.pi;
+                } else if (angle_diff < -std.math.pi) {
+                    angle_diff += 2.0 * std.math.pi;
+                }
+
+                const abs_angle_diff = @abs(angle_diff);
+
+                const MIN_RESOLUTION: comptime_float = 3.0;
+                const MAX_RESOLUTION: comptime_float = 32.0;
+                const RESOLUTION_SCALE: comptime_float = 8.0;
+
+                const resolution = @max(MIN_RESOLUTION, @min(MAX_RESOLUTION, abs_angle_diff * RESOLUTION_SCALE));
+
+                const resolutionInt: u16 = @intFromFloat(resolution);
+
+                var triangle_fan = _SliderBatcher.?.GetTriangleFan(resolutionInt + 2) catch unreachable;
+                triangle_fan[0].X = center[0];
+                triangle_fan[0].Y = center[1];
+                triangle_fan[0].Depth = 0.0;
+
+                const clockwise: bool = angle_diff < 0.0;
+
+                for (0..resolutionInt + 1) |i| {
+                    const t: f32 = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(resolutionInt));
+                    const angle = if (clockwise) start_angle - t * abs_angle_diff else start_angle + t * angle_diff;
+
+                    const offset = zm.Vec2f{ @cos(angle), @sin(angle) } * half_thickness;
+
+                    triangle_fan[i + 1].X = center[0] + offset[0];
+                    triangle_fan[i + 1].Y = center[1] + offset[1];
+                    triangle_fan[i + 1].Depth = -1.0;
+                }
             }
         };
 
@@ -359,104 +437,37 @@ pub const DrawableHitSlider = struct {
 
         c.glClear(c.GL_DEPTH_BUFFER_BIT);
 
-        const thickness = zm.Vec2f{ self.Path.PointRadius, self.Path.PointRadius };
-
+        //const thickness = zm.Vec2f{ self.Path.PointRadius, self.Path.PointRadius };
         const points = self.Path.Points;
+        const half_thickness: zm.Vec2f = .{ self.Path.PointRadius, self.Path.PointRadius };
 
-        //std.debug.print("Points:\n", .{});
-        //for (points, 0..) |value, i| {
-        //    std.debug.print("{d}:[{d}|{d}] ", .{ i, value[0], value[1] });
-        //    if (i % 8 == 7) {
-        //        std.debug.print("\n", .{});
-        //    }
-        //}
-        //
-        //std.debug.print("\n", .{});
+        var prev_perpendicular: zm.Vec2f = .{ 0.0, 0.0 };
         //Profiler.Start("Slider_Geometry");
-        const n = points.len;
+        //start cap
+        util.placeCircle(points[0] - self.Path.Position, half_thickness[0]);
+        //end cap
+        util.placeCircle(points[points.len - 1] - self.Path.Position, half_thickness[0]);
+        for (0..points.len - 1) |i| {
+            const current = points[i] - self.Path.Position;
+            var next = points[i + 1] - self.Path.Position;
 
-        const double_n: u16 = @intCast(n * 2);
-
-        var vtx_index: usize = 0;
-        var rightSide = _SliderBatcher.?.GetTriangleStrip(double_n) catch return;
-        var leftSide = _SliderBatcher.?.GetTriangleStrip(double_n) catch return;
-        var mits: i32 = 0;
-        for (0..n) |i| {
-            const curr: zm.Vec2f = points[i] - self.Path.Position; //.{points[i][0] - self.Path.Position[0], points[i][1] - self}
-
-            var nVec: zm.Vec2f = .{ 0.0, 0.0 };
-
-            if (i == 0) {
-                //start cap
-                util.placeCircle(curr, thickness[0]);
-
-                const next = points[i + 1] - self.Path.Position;
-                const dir: zm.Vec2f = util.normalizeSafe(next - curr);
-
-                nVec = util.perpendicular(dir) * thickness;
-            } else if (i == n - 1) {
-                //end cap
-                util.placeCircle(curr, thickness[0]);
-
-                //end point: normal from last segment
-                const prev = points[i - 1] - self.Path.Position;
-                const dir = util.normalizeSafe(curr - prev);
-
-                nVec = util.perpendicular(dir) * thickness;
-            } else {
-                const prev = points[i - 1] - self.Path.Position;
-                const next = points[i + 1] - self.Path.Position;
-
-                const MaxMiterLength = 5.0; //max allowed miter length
-
-                const dirPrev = util.normalizeSafe(curr - prev);
-                const dirNext = util.normalizeSafe(next - curr);
-
-                const normalPrev = util.perpendicular(dirPrev);
-                const normalNext = util.perpendicular(dirNext);
-
-                const miter = util.normalizeSafe(normalPrev + normalNext);
-
-                //miter length scale
-                const dotProduct: f32 = zm.vec.dot(miter, normalPrev);
-                const miterLength = 1.0 / dotProduct;
-
-                //if miter is above threshold just place a circle
-                if (@abs(miterLength) > MaxMiterLength) {
-                    mits += 1;
-                    //std.debug.print("Placed circle because miter was: {d} : {d}\n", .{ miterLength, mits });
-
-                    util.placeCircle(curr, thickness[0]);
-                }
-
-                nVec = util.normalizeSafe(normalPrev + normalNext) * thickness;
-
-                //printf("X: %f Y: %f\n", nVec.x, nVec.y);
+            if (@reduce(.And, current == next)) {
+                //nudge hax
+                next[0] += 0.1;
+                next[1] += 0.1;
             }
 
-            rightSide[vtx_index] = .{
-                .X = curr[0],
-                .Y = curr[1],
-                .Depth = 0.0,
-            };
-            rightSide[vtx_index + 1] = .{
-                .X = curr[0] - nVec[0],
-                .Y = curr[1] - nVec[1],
-                .Depth = -1.0,
-            };
-            //rightSide += 2;
+            const direction = zm.vec.normalize(next - current);
+            const perpendicular: zm.Vec2f = .{ direction[1], -direction[0] };
 
-            leftSide[vtx_index] = .{
-                .X = curr[0],
-                .Y = curr[1],
-                .Depth = 0.0,
-            };
-            leftSide[vtx_index + 1] = .{
-                .X = curr[0] + nVec[0],
-                .Y = curr[1] + nVec[1],
-                .Depth = -1.0,
-            };
-            vtx_index += 2;
+            //draw line segment
+            util.drawLineSegment(current, next, perpendicular, half_thickness);
+            if (i > 0) {
+                //draw corner
+                util.drawCornerJointDynamic(current, prev_perpendicular, perpendicular, half_thickness);
+            }
+
+            prev_perpendicular = perpendicular;
         }
         //Profiler.End("Slider_Geometry");
         const upload_data = _SliderBatcher.?.GetUploadData();
@@ -559,10 +570,12 @@ pub const DrawableHitSlider = struct {
 
         const slider_texture_draw_pos = PlayableBeatmap.MapSliderToPlayfield(self.Path.Bounds);
 
-        const stacking_vector = zm.Vec2f{ self.Beatmap.CircleSizeOsuPixels / 5.0, self.Beatmap.CircleSizeOsuPixels / 5.0 };
         const stacking_count = zm.Vec2f{ @floatFromInt(self.HitObject.StackCount), @floatFromInt(self.HitObject.StackCount) };
 
-        const stacking_offset = stacking_vector * stacking_count;
+        const stacking_offset = self.Beatmap.GetStackVector() * stacking_count;
+
+        //slider_texture_draw_pos[0] += stacking_vector[0];
+        //slider_texture_draw_pos[1] += stacking_vector[0];
 
         g.DrawRect(slider_texture_draw_pos, .{ 10.0, 1.0, 1.0, sliderbody_alpha }, &self.SliderTexture, .{ 0.0, 0.0, 1.0, 1.0 });
 
@@ -575,7 +588,7 @@ pub const DrawableHitSlider = struct {
         //}
 
         if (song_pos >= slider_start and song_pos <= slider_end) {
-            var sliderball_pos = self.Path.CalculatePositionAt(self.HitObject.HitSlider.?.PixelLength * sliderball_progress);
+            var sliderball_pos = self.Path.CalculatePositionAt(self.Path.Length * sliderball_progress);
             sliderball_pos = PlayableBeatmap.MapToPlayfield2(sliderball_pos[0], sliderball_pos[1]);
 
             const sliderball_size = self.Beatmap.GetWorldCircleSize();
