@@ -10,7 +10,7 @@ pub fn PrimitiveBatcher(comptime T: type) type {
         indexWriteIndex: u16 = 0,
 
         pub fn Init(vertexCnt: u16, indexCnt: u16) !PrimitiveBatcher(T) {
-            //Primitive batchers are almost always meant to live for the lifetime of the application, not sure what mem allocator to use
+            //Primitive batchers are always meant to live for the lifetime of the application
             const batcher = PrimitiveBatcher(T){
                 .vertexBuffer = try std.heap.c_allocator.alloc(T, vertexCnt),
                 .indexBuffer = try std.heap.c_allocator.alloc(u16, indexCnt),
@@ -18,20 +18,20 @@ pub fn PrimitiveBatcher(comptime T: type) type {
             return batcher;
         }
 
-        pub inline fn ResetWritePosition(self: *PrimitiveBatcher(T)) void {
+        pub fn ResetWritePosition(self: *PrimitiveBatcher(T)) void {
             self.vertexWriteIndex = 0;
             self.indexWriteIndex = 0;
         }
 
-        pub inline fn GetIndexCount(self: *const PrimitiveBatcher(T)) u16 {
+        pub fn GetIndexCount(self: *const PrimitiveBatcher(T)) u16 {
             return self.indexWriteIndex;
         }
 
-        pub inline fn GetVertexCount(self: *const PrimitiveBatcher(T)) u16 {
+        pub fn GetVertexCount(self: *const PrimitiveBatcher(T)) u16 {
             return self.vertexWriteIndex;
         }
 
-        pub inline fn GetUploadData(self: *PrimitiveBatcher(T)) struct { VertexSlice: []const T, IndexSlice: []const u16 } {
+        pub fn GetUploadData(self: *PrimitiveBatcher(T)) struct { VertexSlice: []const T, IndexSlice: []const u16 } {
             return .{ .VertexSlice = self.vertexBuffer[0..self.vertexWriteIndex], .IndexSlice = self.indexBuffer[0..self.indexWriteIndex] };
         }
 

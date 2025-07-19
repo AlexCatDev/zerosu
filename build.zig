@@ -96,33 +96,6 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
 }
 
-fn LINK_BASS(b: *std.Build, exe: *std.Build.Step.Compile) void {
-    const target = b.standardTargetOptions(.{});
-
-    const targetCpu = target.result.cpu.arch;
-    const targetOs = target.result.os.tag;
-
-    const libsLibPath = switch (targetOs) {
-        .linux => "libs/linux",
-        else => @panic("Unsupported arch"),
-    };
-    exe.addLibraryPath(.{ .cwd_relative = libsLibPath });
-
-    //Will append lib before this path even tho i dont want it
-    const bassLibPath = switch (targetCpu) {
-        .x86_64 => "_x86_64/libbass",
-        .arm => "_armhf/libbass",
-        .aarch64 => "_aarch64/libbass",
-        else => @panic("Unsupported arch"),
-    };
-    exe.linkSystemLibrary(bassLibPath);
-
-    //const finalLibPath = try concatThreeStrings(b.allocator, libsLibPath, "lib", bassLibPath);
-    const finalLibPath = std.fmt.allocPrint(b.allocator, "{s}/lib{s}.so", .{ libsLibPath, bassLibPath }) catch return;
-    defer b.allocator.free(finalLibPath);
-    b.installBinFile(finalLibPath, finalLibPath);
-}
-
 fn addDirToOutput(b: *std.Build, dir_name: []const u8) void {
     b.installDirectory(.{
         .source_dir = .{ .cwd_relative = dir_name },

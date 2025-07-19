@@ -241,7 +241,6 @@ void main() {
 }
 */
 void main() {
-
     vec4 texColor;
     //int texIndex = int(v_Texture);
 

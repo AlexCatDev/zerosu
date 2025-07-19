@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const c = @import("CImports.zig").c;
 
 const Texture = @import("Easy2D/Texture.zig").Texture;
@@ -68,11 +69,6 @@ pub fn main() !void {
 
     //c.glClearColor(0.39, 0.58, 0.93, 1.0);
     c.glClearColor(0.0, 0.0, 0.0, 1.0);
-    var projectionMatrix = zm.Mat4f.orthographic(0.0, @floatFromInt(width), @floatFromInt(height), 0.0, -1.0, 1.0);
-
-    const circleTextureData = @embedFile("textures/circle.png");
-
-    const circleTexture = try Texture.Init(circleTextureData);
 
     var g = try Graphics.Init();
 
@@ -86,35 +82,7 @@ pub fn main() !void {
     var fps: i32 = 0;
     var fpsTimer: f64 = 0.0;
 
-    //   const gameObjMan = GameObjectManager.Init();
-    //
-    //   var player = Player{ .Position = .{ 200.0, 200.0 } };
-    //
-    //   const objData = player.GetObjData();
-    //
-    //   gameObjMan.AddObject(objData);
-
-    var player = Player{ .Position = .{ 200.0, 200.0 }, .Layer = 0, .Texture = circleTexture };
-    //player.Draw(@ptrCast(player), g);
-    //Player.Draw(@ptrCast(&player), &g);
-
-    const playerData = player.GetData();
-
-    var gameObjMan = DrawableManager.Init();
-
-    try gameObjMan.Add(playerData);
-
-    std.debug.print("PlayerID: {d}\n", .{playerData.BaseObjectTypeID});
-    PlayableBeatmap.UpdatePlayfield(@floatFromInt(width), @floatFromInt(height));
-    Viewport.SetViewport(0, 0, width, height);
-    const x = struct {
-        pub fn Callback(_: *Player) bool {
-            std.debug.print("Got object:\n", .{});
-            return false;
-        }
-    };
-
-    gameObjMan.GetAllOfType(Player, x.Callback);
+    onResize(&g, width, height);
 
     SceneManager.GetInstance().AddScene(PlayScene, PlayScene.GetInstance(), PlayScene.GetFnTable());
     SceneManager.GetInstance().AddScene(MenuScene, MenuScene.GetInstance(), MenuScene.GetFnTable());
@@ -153,34 +121,34 @@ pub fn main() !void {
                     width = event.window.data1;
                     height = event.window.data2;
                     //std.debug.print("Resized: {d},{d}\n", .{ width, height });
-                    PlayableBeatmap.UpdatePlayfield(@floatFromInt(width), @floatFromInt(height));
-                    projectionMatrix = zm.Mat4f.orthographic(0.0, @floatFromInt(width), @floatFromInt(height), 0.0, -1.0, 1.0);
-                    Viewport.SetViewport(0, 0, width, height);
+                    onResize(&g, width, height);
                 }
             }
-            const k = &event;
 
-            _ = gameObjMan.OnEvent(k);
-            SceneManager.OnEvent(k);
+            SceneManager.OnEvent(&event);
         }
 
         //clear screen to cornflower blue
         c.glClear(c.GL_COLOR_BUFFER_BIT);
         g.Time = total_time;
-        g.ProjectionMatrix = projectionMatrix;
 
         SceneManager.OnUpdate(delta);
         SceneManager.OnDraw(&g);
 
-        gameObjMan.Update(delta);
-        gameObjMan.Draw(&g);
-
-        g.DrawRectangleCentered(mousePos, .{ 16.0, 16.0 }, .{ 1.0, 0.0, 0.0, 1.0 }, &circleTexture, .{ 0.0, 0.0, 1.0, 1.0 });
+        //g.DrawRectangleCentered(mousePos, .{ 16.0, 16.0 }, .{ 1.0, 0.0, 0.0, 1.0 }, &Play, .{ 0.0, 0.0, 1.0, 1.0 });
 
         g.EndDraw();
 
         c.SDL_GL_SwapWindow(window);
         //return;
-        //std.Thread.sleep(1_000_000);
+        //A little bit of sleep so i dont burn my lap while debugging.
+        if (builtin.mode == .Debug)
+            std.Thread.sleep(1_000_000);
     }
+}
+
+fn onResize(g: *Graphics, window_width: i32, window_height: i32) void {
+    g.ProjectionMatrix = zm.Mat4f.orthographic(0.0, @floatFromInt(window_width), @floatFromInt(window_height), 0.0, -1.0, 1.0);
+    PlayableBeatmap.UpdatePlayfield(@floatFromInt(window_width), @floatFromInt(window_height));
+    Viewport.SetViewport(0, 0, window_width, window_height);
 }

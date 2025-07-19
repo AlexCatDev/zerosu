@@ -20,7 +20,6 @@ pub const Sound = struct {
     }
 
     Stream: Bass.HSTREAM,
-
     //なんかデュプリケートした
 
     pub fn FromFile(file: []const u8) Sound {
@@ -91,5 +90,6 @@ pub const Sound = struct {
 
     pub fn Deinit(self: *Sound) void {
         _ = Bass.BASS_StreamFree(self.Stream);
+        self.Stream = 0;
     }
 };

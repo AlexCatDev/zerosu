@@ -1,5 +1,9 @@
 {
     "lldb.dereferencePointers": true,
     "lldb.consoleMode": "commands",
-    "lldb.displayFormat": "auto"
+    "lldb.displayFormat": "auto",
+    "workbench.colorCustomizations": {
+        "editorError.border":"#ff0000",
+        "editorError.background":"#ff0000"
+    }
 }

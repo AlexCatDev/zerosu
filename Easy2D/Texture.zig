@@ -30,7 +30,6 @@ pub const Texture = struct {
 
     pub fn Init(fileData: []const u8) !Texture {
         var texture = Texture{ .id = 0, .target = c.GL_TEXTURE_2D, .internalFormat = c.GL_RGBA, .format = c.GL_RGBA, .pixelType = c.GL_UNSIGNED_BYTE, .width = 0, .height = 0, .channels = 0 };
-
         c.glGenTextures(1, &texture.id);
 
         const pixels = c.stbi_load_from_memory(fileData.ptr, @intCast(fileData.len), &texture.width, &texture.height, &texture.channels, 4);
